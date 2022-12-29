@@ -1,0 +1,84 @@
+(* ProVerif settings *)
+set removeEventsForLemma = true.
+set preciseActions = true.
+
+query idP_I,idP_R:id_proc, id_I:id,
+  n_C,n_R:random,
+  sk_I:bs_skey, pk_I:bs_pkey, 
+  bs:bs_alg, state:bs_state;
+  inj-event(RedeemerAccepts(idP_R,true)) ==>
+       event(RedeemerSelectsAlgs(idP_R,bs))
+    && event(RedeemerSelectsIssuer(idP_R,id_I,pk_I))
+    && event(RedeemerChallenge(idP_R,n_R))
+    &&
+    (
+      (
+        inj-event(IssuerId(idP_I,id_I))
+        && inj-event(IssuerRequestReceived(idP_I, bs_blind(bs,pk_I,(n_C,n_R),state)))
+        && inj-event(RedeemerReceivedClientChallenge(idP_R,n_C))
+      )
+      || event(CompromisedBS(id_I,sk_I,pk_I))
+      || bs = ForgeableBS
+    )
+.
+
+let run_participants =
+  !
+  let c_CA = adv in
+  let c_AC = adv in
+  let c_CR = adv in
+  let c_RC = adv in
+  let c_AI = adv in
+  let c_IA = adv in
+  (
+    (* Running the issuers *)
+    let bs = UnforgeableBS in
+    get issuer_data(id_I,sk_I,pk_I) in
+
+    (* Name used only to link events in the queries. Not used in the processes. *)
+    new idP_I[]: id_proc;
+
+    Issuer(idP_I,c_IA,c_AI,id_I,bs,sk_I)
+  ) | (
+    (* Running the redeemers *)
+    in(adv,reveal_context:bool);
+    let bs = UnforgeableBS in
+    get issuer_data(id_I,sk_I,pk_I) in
+
+    let pk_I:bs_pkey = get_public_issuer_data(id_I) in
+    new n_R:random;
+
+    (* Name used only to link events in the queries. Not used in the processes. *)
+    new idP_R[]: id_proc;
+
+    Redeemer(idP_R,c_RC,c_CR,reveal_context,id_I,pk_I,n_R,bs)
+  ) | (
+    get client_data(cid) in
+    (
+      in(adv,use_proxyR:bool);
+      in(adv,use_proxyI:bool);
+      let bs = UnforgeableBS in
+
+      new n_C:random;
+
+      (* Name used only to link events in the queries. Not used in the processes. *)
+      new idP_C[]: id_proc;
+
+      Client(idP_C,use_proxyR,use_proxyI,cid,n_C,
+        c_CA,c_AC,c_CR,c_RC,
+        bs
+      )
+    ) | (
+      (* Name used only to link events in the queries. Not used in the processes. *)
+      new idP_A[]: id_proc;
+
+      Attester(idP_A,c_AC,c_CA,c_AI,c_IA)
+    )
+  )
+.
+
+process
+    (* Generates the participants *)
+    generate_participants
+  | (* Running the participants *)
+    run_participants

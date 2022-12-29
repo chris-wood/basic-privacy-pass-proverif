@@ -1,0 +1,273 @@
+(* Generic attacker controlled channel *)
+free adv:channel.
+
+(* Basic Types *)
+
+type id_proc.       (* Id of process. Only used for queries *)
+type stamp.         (* Timestamp type *)
+type id.            (* Id of participants *)
+type origin_name.   (* Name of origins *)
+
+(* Type converters *)
+fun o2b(origin_name):bitstring [typeConverter].
+fun n2b(random):bitstring [typeConverter].
+
+(**********************************)
+(* Issuance and redemption events *)
+(**********************************)
+
+(* Arguments *)
+event PreciseActions(stamp,bitstring).
+
+(* Managment of Origin-Issuer keys *)
+event GetIssuerKey(id).
+event GetIssuerKeyResult(id,bs_pkey).
+
+(* Unicity of Issuer key *)
+event UniqueIssuerKey(id,bs_skey,bs_pkey).
+
+(**** Clients events *)
+
+(* Parameters *)
+event ClientId(id_proc,id).
+event ClientSelectsAlgs(id_proc,bs_alg).
+
+(* Client receives the origin data from redeemer *)
+event ClientReceivedOriginIssuer(id_proc,origin_name,bs_pkey).
+
+(* Client sends the request (enc_hpke,enc_origin,index,com,zkp) to the attester *)
+event ClientRequest(id_proc,bitstring).
+
+(* Issuer parameters *)
+event IssuerId(id_proc,id).
+event IssuerSelectsAlgs(id_proc,bs_alg).
+event IssuerSelectsChannels(id_proc,channel,channel).
+
+(* Issuance *)
+event IssuerOriginReceived(id_proc,origin_name).
+event IssuerRequestReceived(id_proc,bitstring).
+event IssueFinalized(id_proc,bitstring).
+
+(* Note that a token request was replayed *)
+event IssueReplay(id_proc,bitstring).
+
+(* Redeemer parameters *)
+event RedeemerSelectsIssuer(id_proc,id,bs_pkey).
+event RedeemerSelectsAlgs(id_proc,bs_alg).
+
+(* Challenge *)
+event RedeemerChallenge(id_proc, random).
+event RedeemerReceivedClientChallenge(id_proc,random).
+event RedeemerAccepts(id_proc,bool).
+
+(* Attester parameters *)
+(* event AttesterSelectsClient(id_proc,element). *)
+event AttesterSelectsChannelsWithClient(id_proc,channel,channel).
+event AttesterSelectsChannelsWithIssuer(id_proc,channel,channel).
+
+(* Attester forwards the request to the issuer *)
+event AttesterForwardRequest(id_proc,id,bitstring).
+
+(* Acceptance results *)
+event ClientAccepts(id_proc).
+event ClientRejects(id_proc).
+event IssuanceFailed(id_proc).
+event IssuanceSuccess(id_proc).
+
+(* Compromised data *)
+event CompromisedBS(id,bs_skey,bs_pkey).
+event CompromisedChannel(channel).
+
+(*************************************)
+(* Managment of identities and keys  *)
+(*************************************)
+
+(* Clients informations *)
+table client_data(
+  id        (* Identity of the client *)
+).
+
+(* Issuer informations *)
+table issuer_data(
+  id,         (* Identify of the issuer *)
+  bs_skey,    (* Private BS signing key *)
+  bs_pkey     (* Public BS verifying key *)
+).
+
+(* Table for storing replays at the issuer *)
+table replay_table(id,bitstring).
+
+(* The generation of participants and their data *)
+let gen_client =
+  !
+  new id_C[]:id;
+  insert client_data(id_C);
+  (* Reveal the public information to the attacker *)
+  out(adv,id_C)
+.
+
+let gen_issuer =
+  !
+  new id_I[]:id;
+  let BS_keys(pk_I,sk_I) = BS_keygen() in
+  insert issuer_data(id_I, sk_I, pk_I);
+  (* Reveal the public information to the attacker *)
+  out(adv,(id_I, pk_I));
+
+  event UniqueIssuerKey(id_I,sk_I,pk_I);
+
+  (* Compromised key *)
+  event CompromisedBS(id_I,sk_I,pk_I);
+  out(adv,sk_I)
+.
+
+let generate_participants =
+  gen_client | gen_issuer
+.
+
+letfun get_public_issuer_data(id_I:id) =
+  event GetIssuerKey(id_I);
+  get issuer_data(=id_I,sk_I,pk_I) [precise] in
+  event GetIssuerKeyResult(id_I,pk_I);
+  pk_I
+.
+
+(***************************************************)
+(* Client, Issuer, Attester and Redeemer processes *)
+(***************************************************)
+
+let Client(idP_C:id_proc,use_proxyR:bool,use_proxyI:bool,cid:id,n_C:random,c_CA:channel,c_AC:channel,c_CR:channel,c_RC:channel,bs:bs_alg) =
+  (*
+    The Client should have:
+      - c_CA : the private channel shared between the client and attester (obtained through TLS connection)
+      - use_proxy: determine if the client should randomise its cid
+  *)
+
+  event ClientId(idP_C,cid);
+  event ClientSelectsAlgs(idP_C,bs);
+
+  (* Choose whether to randomize the client identity presented to the issuer *)
+  let cid_I = if use_proxyI then new cid_I[]:id; cid_I else cid in
+  let cid_R = if use_proxyR then new cid_R[]:id; cid_R else cid in
+
+  out(c_CR, cid_R);
+
+  (* Get a challenge *)
+  in(c_RC, (n_R:random,origin:origin_name,pk_I:bs_pkey)) [precise];
+
+  event ClientReceivedOriginIssuer(idP_C,origin,pk_I);
+
+  (* Create the token input *)
+  let context = (n_C, n_R) in
+
+  (* Blind the context with the public key of the issuer *)
+  let (req:bitstring,state:bs_state) = BS_blind(bs,pk_I,context) in
+
+  (* Mark the Client request *)
+  event ClientRequest(idP_C, req);
+
+  let token_request = req in
+  out(c_CA, (cid_I, token_request));
+
+  in(c_AC, response:bitstring);
+
+  (* Mark the issuance response *)
+  event IssueFinalized(idP_C, response);
+
+  (* Finalize the blind signature protocol *)
+  let sig = BS_finalize(response, state) in
+
+  (* If the token signature was valid, present it back to the origin *)
+  if BS_vf(bs, pk_I, context, sig) then (
+    event IssuanceSuccess(idP_C);
+
+    (* Send a token in response to the challenge *)
+    (* event Present(n_c, n_R, sigalg, sig, vid); *)
+    out(c_CR, (cid_R,n_C, sig));
+
+    (* Read the origin accept/reject flag *)
+    in(c_RC, valid:bool);
+    if valid then
+      event ClientAccepts(idP_C)[]
+    else
+      event ClientRejects(idP_C)
+  ) else (
+      event IssuanceFailed(idP_C)
+  )
+.
+
+let Attester(idP_A:id_proc,c_AC:channel,c_CA:channel,c_AI:channel,c_IA:channel) =
+
+  (* event AttesterSelectsClient(idP_A,pk_C); *)
+  event AttesterSelectsChannelsWithClient(idP_A,c_AC,c_CA);
+  event AttesterSelectsChannelsWithIssuer(idP_A,c_AI,c_IA);
+
+  in(c_CA, (cid:id, token_request:bitstring)) [precise];
+
+  event AttesterForwardRequest(idP_A,cid,token_request);
+
+  (* Forward the request to the issuer and get a response *)
+  out(c_AI, (cid, token_request));
+  in(c_IA, rep:bitstring) [precise];
+
+  (* Forward the blind signature back to the client *)
+  out(c_AC, rep)
+.
+
+let Issuer(idP_I:id_proc,c_IA:channel,c_AI:channel,id_I:id,bs:bs_alg,sk_I:bs_skey) =
+
+  event IssuerId(idP_I,id_I);
+  event IssuerSelectsAlgs(idP_I,bs);
+  event IssuerSelectsChannels(idP_I,c_AI,c_IA);
+
+  in(c_AI, (cid:bitstring, token_request:bitstring));
+
+  get replay_table(=id_I,=token_request) in
+    (* Don't do anything other than emit an event here *)
+    event IssueReplay(idP_I,token_request)
+  else
+    (* Store the token request in the replay table *)
+    insert replay_table(id_I,token_request);
+
+    event IssuerRequestReceived(idP_I,token_request);
+
+    (* Blind signature of the request with sk *)
+    let rep = BS_blind_sign(bs,sk_I,token_request) in
+
+    (* Return result to attester (and the attacker) *)
+    out(c_IA, rep)
+.
+
+let Redeemer(idP_R:id_proc, c_RC:channel, c_CR:channel, reveal_context:bool, id_I:id, 
+  pk_I:bs_pkey, n_R:random, bs:bs_alg) =
+
+  event RedeemerSelectsIssuer(idP_R,id_I,pk_I);
+  event RedeemerSelectsAlgs(idP_R,bs);
+
+  (* Start visit interaction with client *)
+  in(c_CR, cid:bitstring) [precise];
+
+  (* Challenge the client *)
+  event RedeemerChallenge(idP_R,n_R);
+  out(c_RC, (n_R,pk_I));
+
+  (* Read the client token *)
+  in(c_CR, (=cid,n_C:random, sig:bs_sig));
+  new st[]:stamp; event PreciseActions(st,n2b(n_C));
+  event RedeemerReceivedClientChallenge(idP_R,n_C);
+
+  (* Verify token and send result to client *)
+  let context = (n_C, n_R) in
+  let valid = BS_vf(bs, pk_I, context, sig) in
+
+  (* Complete protocol with client *)
+  out(c_RC, valid);
+  
+  event RedeemerAccepts(idP_R,valid);
+
+  (* Reveal some information to the attacker *)
+  out(adv, (cid, sig, valid));
+  (* Release redemption details to the attacker *)
+  if reveal_context then
+  out(adv, (n_C, n_R))
+.

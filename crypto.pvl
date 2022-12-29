@@ -1,0 +1,89 @@
+const zero: bitstring [data].
+type random.
+
+(********************)
+(* Blind Signatures *)
+(********************)
+
+type bs_alg.
+const UnforgeableBS, ForgeableBS: bs_alg.
+
+type bs_sig.    (* Blind signatures *)
+type bs_pkey.   (* Blind signatures public keys *)
+type bs_skey.   (* Blind signatures signing keys *)
+type bs_state.  (* State generate by blind *)
+type bs_keys.
+
+(* Type converters *)
+fun bs2b(bs_alg):bitstring [typeConverter].
+
+const BS_Bottom:bs_sig.  (* Represents a failure of the finalize function *)
+
+(* Available functions :
+  - BS_keygen : unit -> bs_pkey * bs_skey
+  - BS_sign : bs_alg -> bs_skey -> bitstring -> bs_sig
+  - BS_blind : bs_alg -> bs_pkey -> bitstring -> bitstring * bs_state
+  - BS_finalize : bitstring -> bs_state -> bs_sig
+  - BS_blind_sign : bs_alg -> bs_skey -> bitstring -> bitstring
+  - BS_vf : bs_alg -> bs_pkey -> bitstring -> bs_sig -> bool
+*)
+
+(* Generation of keys *)
+fun BS_keys(bs_pkey,bs_skey):bs_keys [data].
+
+fun bs_pk(bs_skey): bs_pkey.
+
+letfun BS_keygen() =
+  new sk[]:bs_skey;
+  BS_keys(bs_pk(sk),sk)
+.
+
+(* Signing function  *)
+fun BS_sign(bs_alg,bs_skey,bitstring):bs_sig.
+
+(* Blind function *)
+fun bs_blind(bs_alg,bs_pkey,bitstring,bs_state):bitstring.
+
+letfun BS_blind(alg:bs_alg,vk:bs_pkey,x:bitstring) =
+  new r[]:bs_state;
+  (bs_blind(alg,vk,x,r),r)
+.
+
+(* Blind signature *)
+fun BS_blind_sign(bs_alg, bs_skey, bitstring):bitstring.
+
+(* Forgeable signature *)
+fun bs_forge(bs_pkey,bitstring): bs_sig.
+
+(* Finalize *)
+
+fun BS_finalize(bitstring, bs_state):bs_sig
+reduc forall alg:bs_alg, k:bs_skey, x:bitstring, r:bs_state;
+  BS_finalize(
+    BS_blind_sign(alg, k, bs_blind(alg, bs_pk(k), x, r)), r) = BS_sign(alg, k, x)
+otherwise forall alg:bs_alg, k,k':bs_skey, x:bitstring, r,r':bs_state;
+  BS_finalize(
+    BS_blind_sign(ForgeableBS, k, bs_blind(ForgeableBS, bs_pk(k'), x, r)), r') = bs_forge(bs_pk(k'), x)
+otherwise forall bs:bitstring,r:bs_state; BS_finalize(bs,r) = BS_Bottom
+.
+
+(* Verify *)
+fun BS_vf(bs_alg, bs_pkey, bitstring, bs_sig): bool
+reduc forall alg:bs_alg, k:bs_skey, x:bitstring;
+  BS_vf(alg, bs_pk(k), x, BS_sign(alg, k, x)) = true
+otherwise forall k:bs_skey, x:bitstring;
+  BS_vf(ForgeableBS, bs_pk(k), x, bs_forge(bs_pk(k), x)) = true
+otherwise forall alg:bs_alg, vk:bs_pkey or fail, x:bitstring or fail, sig:bs_sig or fail;
+  BS_vf(alg,vk,x,sig) = false
+.
+
+(***************************************)
+(* Hash function                       *)
+(***************************************)
+
+fun hash(bitstring):bitstring.
+
+(********************************************************)
+(* Authenticated Encryption with Additional Data        *)
+(********************************************************)
+

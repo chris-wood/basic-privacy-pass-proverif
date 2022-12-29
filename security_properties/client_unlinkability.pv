@@ -1,0 +1,133 @@
+(* This file aims to prove:
+  1- ???
+
+  Under the following hypothesis:
+    Two clients use the same key pair when interacting with the issuer
+*)
+
+lemma
+  id,id':id,
+  skI1,skI1',skI2,skI2',skI,skI':bs_skey,
+  pkI1,pkI1',pkI2,pkI2',pkI,pkI':bs_pkey;
+  (* Values are the same on the left and right side when creating the keys *)
+  event(UniqueIssuerKey(diff[id,id'],diff[skI,skI'],diff[pkI,pkI'])) ==>
+  id = id' && skI = skI' && pkI = pkI'
+
+  (* Do we need the following from the rate-limited variant? *)
+  (* event(GetIdOriginTarget(id,diff[o,o'])) &&
+  event(UniqueOriginIssuerKey(id,o,skI,pkI)) ==>
+  event(UniqueOriginIssuerKey(id,o',skI',pkI'));
+
+  event(GetIdOriginTarget(id,diff[o,o'])) &&
+  event(UniqueOriginIssuerKey(id,o',skI',pkI')) ==>
+  event(UniqueOriginIssuerKey(id,o,skI,pkI)) *)
+.
+
+(* The main processes *)
+
+let run_other_participants =
+  !
+  let c_CA = adv in
+  let c_AC = adv in
+  let c_CR = adv in
+  let c_RC = adv in
+  let c_AI = adv in
+  let c_IA = adv in
+  (
+    (* Running the issuers *)
+    let bs = UnforgeableBS in
+    get issuer_data(id_I,sk_I,pk_I) in
+
+    (* Name used only to link events in the queries. Not used in the processes. *)
+    new idP_I[]: id_proc;
+
+    Issuer(idP_I,c_IA,c_AI,id_I,bs,sk_I)
+  ) | (
+    (* Running the redeemers *)
+    in(adv,reveal_context:bool);
+    let bs = UnforgeableBS in
+    get issuer_data(id_I,sk_I,pk_I') in
+
+    let pk_I:bs_pkey = get_public_issuer_data(id_I) in
+    new n_R:random;
+
+    (* Name used only to link events in the queries. Not used in the processes. *)
+    new idP_R[]: id_proc;
+
+    Redeemer(idP_R,c_RC,c_CR,reveal_context,id_I,pk_I,n_R,bs)
+  ) | (
+    get client_data(cid) in
+    (
+      in(adv,use_proxyR:bool);
+      in(adv,use_proxyI:bool);
+      let bs = UnforgeableBS in
+
+      new n_C:random;
+
+      (* Name used only to link events in the queries. Not used in the processes. *)
+      new idP_C[]: id_proc;
+
+      Client(idP_C,use_proxyR,use_proxyI,cid,n_C,
+        c_CA,c_AC,c_CR,c_RC,
+        bs
+      )
+    ) | (
+      (* Name used only to link events in the queries. Not used in the processes. *)
+      new idP_A[]: id_proc;
+
+      Attester(idP_A,c_AC,c_CA,c_AI,c_IA)
+    )
+  )
+.
+
+not attacker(new c_CA').
+
+event idPDiffC(id_proc).
+
+let run_diff =
+  !
+  new c_CA':channel;
+  let c_AC' = adv in
+  let c_CR' = adv in
+  let c_RC' = adv in
+  let c_AI' = adv in
+  let c_IA' = adv in
+  (
+    get client_data(cid1) [precise] in
+    get client_data(cid2) [precise] in
+
+    let cid = diff[cid1,cid2] in
+
+    (
+      let use_proxyR = true in
+      let use_proxyI = true in
+      in(adv,bs:bs_alg);
+
+      (* Generate n_C *)
+      new n_C[]:random;
+
+      (* Name used only to link events in the queries. Not used in the processes. *)
+      new idP_C[]: id_proc;
+      event idPDiffC(idP_C);
+
+      Client(idP_C,use_proxyR,use_proxyI,cid,n_C,
+        c_CA',c_AC',c_CR',c_RC',
+        bs
+      )
+    ) | (
+      (* Name used only to link events in the queries. Not used in the processes. *)
+      new idP_A[]: id_proc;
+
+      Attester(idP_A,c_AC',c_CA',c_AI',c_IA')
+    )
+  )
+.
+
+process
+    (* Generates the participants *)
+    generate_participants
+  | (* Running the Clients and Attesters *)
+    run_other_participants
+  | (* Running the Clients and Attestions with diff *)
+    run_diff
+
