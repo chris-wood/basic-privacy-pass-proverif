@@ -1,5 +1,5 @@
 (* This file aims to prove:
-  1- ???
+  1- equivalence between two issuance and redemption flows run by the adversarially chosen clients
 
   Under the following hypothesis:
     Two clients use the same key pair when interacting with the issuer
@@ -12,15 +12,6 @@ lemma
   (* Values are the same on the left and right side when creating the keys *)
   event(UniqueIssuerKey(diff[id,id'],diff[skI,skI'],diff[pkI,pkI'])) ==>
   id = id' && skI = skI' && pkI = pkI'
-
-  (* Do we need the following from the rate-limited variant? *)
-  (* event(GetIdOriginTarget(id,diff[o,o'])) &&
-  event(UniqueOriginIssuerKey(id,o,skI,pkI)) ==>
-  event(UniqueOriginIssuerKey(id,o',skI',pkI'));
-
-  event(GetIdOriginTarget(id,diff[o,o'])) &&
-  event(UniqueOriginIssuerKey(id,o',skI',pkI')) ==>
-  event(UniqueOriginIssuerKey(id,o,skI,pkI)) *)
 .
 
 (* The main processes *)
