@@ -1,8 +1,5 @@
 (* This file aims to prove:
   1- equivalence between two issuance and redemption flows run by the adversarially chosen clients
-
-  Under the following hypothesis:
-    Two clients use the same key pair when interacting with the issuer
 *)
 
 (* The main processes *)
