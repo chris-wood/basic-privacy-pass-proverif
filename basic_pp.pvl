@@ -6,10 +6,8 @@ free adv:channel.
 type id_proc.       (* Id of process. Only used for queries *)
 type stamp.         (* Timestamp type *)
 type id.            (* Id of participants *)
-type origin_name.   (* Name of origins *)
 
 (* Type converters *)
-fun o2b(origin_name):bitstring [typeConverter].
 fun n2b(random):bitstring [typeConverter].
 
 (**********************************)
@@ -19,34 +17,16 @@ fun n2b(random):bitstring [typeConverter].
 (* Arguments *)
 event PreciseActions(stamp,bitstring).
 
-(* Managment of Origin-Issuer keys *)
-event GetIssuerKey(id).
-event GetIssuerKeyResult(id,bs_pkey).
-
-(* Unicity of Issuer key *)
-event UniqueIssuerKey(id,bs_skey,bs_pkey).
-
 (**** Clients events *)
-
-(* Parameters *)
-event ClientId(id_proc,id).
-event ClientSelectsAlgs(id_proc,bs_alg).
-
-(* Client receives the origin data from redeemer *)
-event ClientReceivedOriginIssuer(id_proc,origin_name,bs_pkey).
 
 (* Client sends the request (enc_hpke,enc_origin,index,com,zkp) to the attester *)
 event ClientRequest(id_proc,bitstring).
 
 (* Issuer parameters *)
 event IssuerId(id_proc,id).
-event IssuerSelectsAlgs(id_proc,bs_alg).
-event IssuerSelectsChannels(id_proc,channel,channel).
 
 (* Issuance *)
-event IssuerOriginReceived(id_proc,origin_name).
 event IssuerRequestReceived(id_proc,bitstring).
-event IssueFinalized(id_proc,bitstring).
 
 (* Note that a token request was replayed *)
 event IssueReplay(id_proc,bitstring).
@@ -60,11 +40,6 @@ event RedeemerChallenge(id_proc, random).
 event RedeemerReceivedClientChallenge(id_proc,random).
 event RedeemerAccepts(id_proc,bool).
 
-(* Attester parameters *)
-(* event AttesterSelectsClient(id_proc,element). *)
-event AttesterSelectsChannelsWithClient(id_proc,channel,channel).
-event AttesterSelectsChannelsWithIssuer(id_proc,channel,channel).
-
 (* Attester forwards the request to the issuer *)
 event AttesterForwardRequest(id_proc,id,bitstring).
 
@@ -76,7 +51,6 @@ event IssuanceSuccess(id_proc).
 
 (* Compromised data *)
 event CompromisedBS(id,bs_skey,bs_pkey).
-event CompromisedChannel(channel).
 
 (*************************************)
 (* Managment of identities and keys  *)
@@ -114,8 +88,6 @@ let gen_issuer =
   (* Reveal the public information to the attacker *)
   out(adv,(id_I, pk_I));
 
-  event UniqueIssuerKey(id_I,sk_I,pk_I);
-
   (* Compromised key *)
   event CompromisedBS(id_I,sk_I,pk_I);
   out(adv,sk_I)
@@ -126,9 +98,7 @@ let generate_participants =
 .
 
 letfun get_public_issuer_data(id_I:id) =
-  event GetIssuerKey(id_I);
   get issuer_data(=id_I,sk_I,pk_I) [precise] in
-  event GetIssuerKeyResult(id_I,pk_I);
   pk_I
 .
 
@@ -143,9 +113,6 @@ let Client(idP_C:id_proc,use_proxyR:bool,use_proxyI:bool,cid:id,n_C:random,c_CA:
       - use_proxy: determine if the client should randomise its cid
   *)
 
-  event ClientId(idP_C,cid);
-  event ClientSelectsAlgs(idP_C,bs);
-
   (* Choose whether to randomize the client identity presented to the issuer *)
   let cid_I = if use_proxyI then new cid_I[]:id; cid_I else cid in
   let cid_R = if use_proxyR then new cid_R[]:id; cid_R else cid in
@@ -153,9 +120,7 @@ let Client(idP_C:id_proc,use_proxyR:bool,use_proxyI:bool,cid:id,n_C:random,c_CA:
   out(c_CR, cid_R);
 
   (* Get a challenge *)
-  in(c_RC, (n_R:random,origin:origin_name,pk_I:bs_pkey)) [precise];
-
-  event ClientReceivedOriginIssuer(idP_C,origin,pk_I);
+  in(c_RC, (n_R:random,pk_I:bs_pkey)) [precise];
 
   (* Create the token input *)
   let context = (n_C, n_R) in
@@ -170,9 +135,6 @@ let Client(idP_C:id_proc,use_proxyR:bool,use_proxyI:bool,cid:id,n_C:random,c_CA:
   out(c_CA, (cid_I, token_request));
 
   in(c_AC, response:bitstring);
-
-  (* Mark the issuance response *)
-  event IssueFinalized(idP_C, response);
 
   (* Finalize the blind signature protocol *)
   let sig = BS_finalize(response, state) in
@@ -198,10 +160,6 @@ let Client(idP_C:id_proc,use_proxyR:bool,use_proxyI:bool,cid:id,n_C:random,c_CA:
 
 let Attester(idP_A:id_proc,c_AC:channel,c_CA:channel,c_AI:channel,c_IA:channel) =
 
-  (* event AttesterSelectsClient(idP_A,pk_C); *)
-  event AttesterSelectsChannelsWithClient(idP_A,c_AC,c_CA);
-  event AttesterSelectsChannelsWithIssuer(idP_A,c_AI,c_IA);
-
   in(c_CA, (cid:id, token_request:bitstring)) [precise];
 
   event AttesterForwardRequest(idP_A,cid,token_request);
@@ -217,8 +175,6 @@ let Attester(idP_A:id_proc,c_AC:channel,c_CA:channel,c_AI:channel,c_IA:channel) 
 let Issuer(idP_I:id_proc,c_IA:channel,c_AI:channel,id_I:id,bs:bs_alg,sk_I:bs_skey) =
 
   event IssuerId(idP_I,id_I);
-  event IssuerSelectsAlgs(idP_I,bs);
-  event IssuerSelectsChannels(idP_I,c_AI,c_IA);
 
   in(c_AI, (cid:bitstring, token_request:bitstring));
 

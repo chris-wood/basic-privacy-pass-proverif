@@ -32,7 +32,7 @@ let run_participants =
   let c_IA = adv in
   (
     (* Running the issuers *)
-    let bs = UnforgeableBS in
+    in(adv,bs:bs_alg);
     get issuer_data(id_I,sk_I,pk_I) in
 
     (* Name used only to link events in the queries. Not used in the processes. *)
@@ -42,7 +42,7 @@ let run_participants =
   ) | (
     (* Running the redeemers *)
     in(adv,reveal_context:bool);
-    let bs = UnforgeableBS in
+    in(adv,bs:bs_alg);
     get issuer_data(id_I,sk_I,pk_I) in
 
     let pk_I:bs_pkey = get_public_issuer_data(id_I) in
@@ -57,7 +57,7 @@ let run_participants =
     (
       in(adv,use_proxyR:bool);
       in(adv,use_proxyI:bool);
-      let bs = UnforgeableBS in
+      in(adv,bs:bs_alg);
 
       new n_C:random;
 
