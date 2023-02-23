@@ -82,8 +82,3 @@ otherwise forall alg:bs_alg, vk:bs_pkey or fail, x:bitstring or fail, sig:bs_sig
 (***************************************)
 
 fun hash(bitstring):bitstring.
-
-(********************************************************)
-(* Authenticated Encryption with Additional Data        *)
-(********************************************************)
-

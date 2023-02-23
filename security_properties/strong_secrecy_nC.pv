@@ -5,15 +5,6 @@
     Two clients use the same key pair when interacting with the issuer
 *)
 
-lemma
-  id,id':id,
-  skI1,skI1',skI2,skI2',skI,skI':bs_skey,
-  pkI1,pkI1',pkI2,pkI2',pkI,pkI':bs_pkey;
-  (* Values are the same on the left and right side when creating the keys *)
-  event(UniqueIssuerKey(diff[id,id'],diff[skI,skI'],diff[pkI,pkI'])) ==>
-  id = id' && skI = skI' && pkI = pkI'
-.
-
 not attacker(new c_CR').
 not attacker(new c_RC').
 
@@ -31,7 +22,7 @@ let run_other_participants =
   let c_IA = adv in
   (
     (* Running the issuers *)
-    let bs = UnforgeableBS in
+    in(adv,bs:bs_alg);
     get issuer_data(id_I,sk_I,pk_I) in
 
     (* Name used only to link events in the queries. Not used in the processes. *)
@@ -41,7 +32,7 @@ let run_other_participants =
   ) | (
     (* Running the redeemers *)
     in(adv,reveal_context:bool);
-    let bs = UnforgeableBS in
+    in(adv,bs:bs_alg);
     get issuer_data(id_I,sk_I,pk_I') in
 
     let pk_I:bs_pkey = get_public_issuer_data(id_I) in
@@ -56,7 +47,7 @@ let run_other_participants =
     (
       in(adv,use_proxyR:bool);
       in(adv,use_proxyI:bool);
-      let bs = UnforgeableBS in
+      in(adv,bs:bs_alg);
 
       new n_C:random;
 
@@ -89,9 +80,6 @@ let run_diff =
     let reveal_context = false in
     in(adv,bs:bs_alg);
 
-    (* Running the redeemers *)
-    in(adv,reveal_context:bool);
-    let bs = UnforgeableBS in
     get issuer_data(id_I,sk_I,pk_I) in
 
     let pk_I:bs_pkey = get_public_issuer_data(id_I) in
