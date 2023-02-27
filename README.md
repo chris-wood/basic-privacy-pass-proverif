@@ -24,3 +24,6 @@ To simplify the evaluation, we wrote a simple `Makefile` that contains these com
 - `make unlinkability` for the unlinkability of the client. It contains 1 true query.
 - `make unforgeability` for the unforgeability of the token. It contains 1 true query.
 
+## Limitations
+
+The model assumes an "ideal" configuration for Privacy Pass and seeks to prove the properties above in simple cases. For example, it models unlinkability in a manner similar to indistinguishability, wherein the attacker is asked to determine if a trace corresponds to one of two (maliciously) chosen clients. Unlinkability demands that the attacker cannot do this. The model does not consider how, for example, the attacker can use information revealed during the issuance or redemption protocol to place a client into one of two different anonymity sets. 
